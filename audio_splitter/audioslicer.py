@@ -2,7 +2,11 @@
 
 import sys
 import time
+from time import sleep
+import os
 from datetime import datetime
+#because the standard datetime.strptime doesn't like timezones we bring in the big guns
+from dateutil import parser,tz
 from pydub import AudioSegment
 
 # Enter your given "constants" here
@@ -10,33 +14,34 @@ from pydub import AudioSegment
 # default for now is in the user's home
 # Yes, this is Windows only right now, sue me
 # this is where the one second clips go
-working_directory = os.path.normpath("c:/Users/" + os.getenv('USERNAME') + "/audiosplitter/")
+working_directory = ("c:/Users/" + os.getenv('USERNAME') + "/audiosplitter/")
 
 #this is the source audio file - it can be anywhere really
 #TODO: expand to grabbing user input about first file in sequence and smartly iterate over files that are back-to-back using Concatenation
 #TODO: drag and drop file to convert (interface TBD)
-working_file = "insert_file_name_here"
+working_file = "2016.01.09-15.30.00-S.mp3"
 
 # pydub does things in milliseconds
 ten_seconds = 10 * 1000
 one_second = 1000
 
-#TODO: 	export files in directories by year, month,and day so they can be copypasted to the archiver
-#		requires smartly tracking the unix timestamp and switching over between folders
-#		(covert timestamp to the array format and extract the year, month, day and shove it into the filename string)
+#TODO: export files in directories by year, month,and day so they can be copypasted to the archiver
+#      requires smartly tracking the unix timestamp and switching over between folders
+#      (covert timestamp to the array format and extract the year, month, day and shove it into the filename string)
 #TODO: Confirm archiver folder behaviour around leap days and DST
-def slice_file( AudioSegment infile, String workingdir, String start ):
-	#find the duration of the input clip in millliseconds
-	duration_in_milliseconds = len(infile)
+#@params: AudioSegment infile, String workingdir, String start
+def slice_file( infile, workingdir, start ):
+    #find the duration of the input clip in millliseconds
+    duration_in_milliseconds = len(infile)
 
-	song = infile
-	#grab each one second slice and save it from the first second to the last whole second in the file
-	for i in range(0,duration_in_milliseconds,1*one_second):
-	    print ("Second number %s \n" % (int(i/1000)) )
-	    offset = (i + one_second)
-	    current_second = song[i:offset]
-	    filename = working_directory + str(int(start) + (int(i/1000))) + ".mp3"
-	    current_second.export(filename, format="mp3")
+    song = infile
+    #grab each one second slice and save it from the first second to the last whole second in the file
+    for i in range(0,duration_in_milliseconds,1*one_second):
+        print ("Second number: %s \n" % (int(i/1000)) )
+        offset = (i + one_second)
+        current_second = song[i:offset]
+        filename = os.path.normpath(working_directory + "/" + str(int(start) + (int(i/1000))) + "-second.mp3")
+        current_second.export(filename, format="mp3")
 
 #helper function to ensure the working directory exists where f is the input directory
 def ensure_dir(f):
@@ -68,7 +73,7 @@ def query_yes_no(question, default="yes"):
 
     while True:
         sys.stdout.write(question + prompt)
-        choice = raw_input().lower()
+        choice = input().lower()
         if default is not None and choice == '':
             return valid[default]
         elif choice in valid:
@@ -80,36 +85,40 @@ def query_yes_no(question, default="yes"):
 # Guides user to specifying the start time, without microseconds decimal - the archiver doesn't use microseconds
 #returns:  a POSIX timestamp as a string without decimals (timestamps are usually of type float)
 def gettimestamp():
-	confirm = 0
-	while (confirm = 0):
-		indate = input("Enter the (local!) start date of the audio file (format: DD-MM-YYYY) ")
-	    intime = input("Enter the (also local!) start time of the audio file to the nearest second, 24 hour clock. Midnight is 00:00:00. (format: HH:MM:SS) ")
-	    bool_in_is_dst = query_yes_no("Is DST active at the start of the audio file? (If you're past the point of \"spring forward\", then answer yes). \n If you're not sure about DST, make sure to look up what second DST takes effect. Or just avoid having audio files starting during DST.", None)
-		if bool_in_is_dst = TRUE:
-			in_is_dst = 1
-		else:
-			in_is_dst = 0
-	    print('\n')
-	    start_time = time.strptime(indate + " " + intime, "%d-%m-%Y %H:%M:%S")
-	    start_time.tm_isdst = int(in_is_dst)
+    confirm = 0
+    while (confirm == 0):
+        indate = input("\nEnter the (local!) start date of the audio file (format: DD-MM-YYYY) ")
+        intime = input("Enter the (also local!) start time of the audio file to the nearest second, 24 hour clock. Midnight is 00:00:00. (format: HH:MM:SS) ")
+        bool_in_is_dst = query_yes_no("\nIs DST active at the start of the audio file? (If you're past the point of \"spring forward\", then answer yes). \nIf you're not sure about DST, make sure to look up what second DST takes effect. Or just avoid having audio files starting during DST.", None)
+        if bool_in_is_dst == True:
+            in_is_dst = "PDT"
+            offset="-0700" #yes I've painstainkingly confirmed that these offsets are working as intended. Programming with timezones, not even once.
+        else:
+            in_is_dst = "PST"
+            offset = "-0800"
+        print('\n')
+        datestring = indate + " " + intime + offset
+        human_readable_time = datetime.strptime(indate+" "+intime, "%d-%m-%Y %H:%M:%S")
+        start_time = parser.parse(datestring)
+        #convert the time we have to a posix timestamp
+        start_timestamp = int(datetime.timestamp(start_time))
 
-		temp_string = "You entered the following information: %s \n Is this information correct?" % (start_time);
-		response = query_yes_no(temp_string, None)
-		if (response = TRUE)
-			confirm = 1;
-		else
-			print ("\n Okay, I'll ask you again ... \n \n")
-			sleep(1)
-			confirm = 0;
+        temp_string = "You entered the following information: (YYYY-MM-DD HH:MM:SS) \n%s %s \nPOSIX TIMESTAMP - %s \nIs this information correct?" % (human_readable_time,in_is_dst,start_timestamp);
+        response = query_yes_no(temp_string, None)
+        if response == True:
+            confirm = 1;
+        else:
+            print ("\n Okay, I'll ask you again ... \n \n")
+            sleep(1)
+            confirm = 0;
 
-	#convert the time we have to a posix timestamp
-	start_timestamp = datetime.timestamp(start_time)
-	return str(int(start_timestamp))
+
+    return str(start_timestamp)
 
 def main():
 
-	#Some timestamp information right now for the user to see how the archiver works (or really, get reminded because you only use this when the archiver has
-	# a hard drive kick the bucket)
+    #Some timestamp information right now for the user to see how the archiver works (or really, get reminded because you only use this when the archiver has
+    # a hard drive kick the bucket)
     current = datetime.now();
     current_utc = datetime.utcnow();
 
@@ -123,17 +132,17 @@ def main():
     print ("The CiTR Archiver conists of many second-long files which it has as mp3s, each with a unix timestamp. For example: %s-second.mp3 is the file from %s, local time, or %s UTC \n \nUNIX timestamps are by definition based on UTC." % ( current_timestamp,current,current_utc ) )
     print ("It is currently %s local time" % (current) )
 
-	#timestamp returned from this function is a string, no decimals in the timestamp
+    #timestamp returned from this function is a string, no decimals in the timestamp
     timestamp = gettimestamp()
 
-	#Prep the output directory
-	ensure_dir(working_direcory)
+    #Prep the output directory
+    ensure_dir(working_directory)
 
-	#do the audio conversion now that we've carefully specified our parameters
-	slice_file( AudioSegment.from_mp3(working_file), working_direcory, timestamp)
+    #do the audio conversion now that we've carefully specified our parameters
+    slice_file( AudioSegment.from_mp3(working_file), working_directory, timestamp)
 
-	print "\n JOB COMPLETE"
-	sleep( 0.5 )
+    print ("\n JOB COMPLETE")
+    sleep( 0.5 )
 
 if __name__ == "__main__":
     main()
