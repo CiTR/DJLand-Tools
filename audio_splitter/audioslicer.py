@@ -7,6 +7,7 @@ import os
 from datetime import datetime
 #because the standard datetime.strptime doesn't like timezones we bring in the big guns
 from dateutil import parser,tz
+import pytz
 from pydub import AudioSegment
 
 # Enter your given "constants" here
@@ -19,15 +20,16 @@ working_directory = ("c:/Users/" + os.getenv('USERNAME') + "/audiosplitter/")
 #this is the source audio file - it can be anywhere really
 #TODO: expand to grabbing user input about first file in sequence and smartly iterate over files that are back-to-back using Concatenation
 #TODO: drag and drop file to convert (interface TBD)
-working_file = "2016.01.09-15.30.00-S.mp3"
+working_file = sys.argv[1] #set to this for filename specified via command line argv
+#working_file = "" #set to this for filename specified here
+
+#log file location
+#for now, we don't have the option of disabling this
+log_file = "audioslicer-log.txt"
 
 # pydub does things in milliseconds
-ten_seconds = 10 * 1000
 one_second = 1000
 
-#TODO: export files in directories by year, month,and day so they can be copypasted to the archiver
-#      requires smartly tracking the unix timestamp and switching over between folders
-#      (covert timestamp to the array format and extract the year, month, day and shove it into the filename string)
 #TODO: Confirm archiver folder behaviour around leap days and DST
 #@params: AudioSegment infile, String workingdir, String start
 def slice_file( infile, workingdir, start ):
@@ -37,10 +39,13 @@ def slice_file( infile, workingdir, start ):
     song = infile
     #grab each one second slice and save it from the first second to the last whole second in the file
     for i in range(0,duration_in_milliseconds,1*one_second):
+        #get the folder where this second goes:
+        arr = datefolderfromtimestamp( int(start) + (int(i/1000)))
         print ("Second number: %s \n" % (int(i/1000)) )
         offset = (i + one_second)
         current_second = song[i:offset]
-        filename = os.path.normpath(working_directory + "/" + str(int(start) + (int(i/1000))) + "-second.mp3")
+        ensure_dir(working_directory + "/" + arr[0] + "/" + arr[1] + "/" + arr[2] + "/")
+        filename = os.path.normpath(working_directory + "/" + arr[0] + "/" + arr[1] + "/" + arr[2] + "/" + str(int(start) + (int(i/1000))) + "-second.mp3")
         current_second.export(filename, format="mp3")
 
 #helper function to ensure the working directory exists where f is the input directory
@@ -83,11 +88,11 @@ def query_yes_no(question, default="yes"):
                              "(or 'y' or 'n').\n")
 
 # Guides user to specifying the start time, without microseconds decimal - the archiver doesn't use microseconds
-#returns:  a POSIX timestamp as a string without decimals (timestamps are usually of type float)
+# @returns:  a POSIX timestamp as a string without decimals (timestamps are usually of type float)
 def gettimestamp():
     confirm = 0
     while (confirm == 0):
-        indate = input("\nEnter the (local!) start date of the audio file (format: DD-MM-YYYY) ")
+        indate = input("\nEnter the (local!) start date of the audio file (format: MM-DD-YYYY) ")
         intime = input("Enter the (also local!) start time of the audio file to the nearest second, 24 hour clock. Midnight is 00:00:00. (format: HH:MM:SS) ")
         bool_in_is_dst = query_yes_no("\nIs DST active at the start of the audio file? (If you're past the point of \"spring forward\", then answer yes). \nIf you're not sure about DST, make sure to look up what second DST takes effect. Or just avoid having audio files starting during DST.", None)
         if bool_in_is_dst == True:
@@ -115,6 +120,42 @@ def gettimestamp():
 
     return str(start_timestamp)
 
+#Files from the logger are in the format are in the format "2016.01.09-15.30.00-S.mp3"
+def gettimestampfromfile( name ):
+    #parse the filename
+    year = name[:4]
+    month = name[5:7]
+    day = name[8:10]
+    hour = name[11:13]
+    minute = name[14:16]
+    second = name[17:19]
+
+    indate = day + "-" + month + "-" + year
+    intime = hour + ":" + minute + ":" + second
+    local = pytz.timezone ("America/Los_Angeles")
+    naive = datetime.strptime (indate+" "+intime, "%d-%m-%Y %H:%M:%S")
+    local_dt = local.localize(naive, is_dst=None)
+    utc_dt = local_dt.astimezone (pytz.utc)
+    start = datetime.timestamp(utc_dt)
+
+    return str(int(start))
+
+# @params: an integer POSIX timestamp. Returns the year, month, and day associated with the timestamp in Vancouver, BC. Takes into account DST. Returns as an array corresponding to the folder for that timestamp on the archiver
+def datefolderfromtimestamp( timestamp ):
+    #datetime.fromtimestamp appprently uses your system's locale to return the date relevant to your location AND IT DOES DST HALLELUJAH.
+    # date_time is a string of YYYY-DD-MM HH:MM:SS
+    date_time = str(datetime.fromtimestamp(timestamp))
+    #
+    year = date_time[:4]
+    day = date_time[5:7]
+    month = date_time[8:10]
+    if (month[0] == '0'):
+        month  = month[1]
+    if (day[0] == '0'):
+        day = day[1]
+    retarray = [year, month, day]
+    return retarray
+
 def main():
 
     #Some timestamp information right now for the user to see how the archiver works (or really, get reminded because you only use this when the archiver has
@@ -132,11 +173,24 @@ def main():
     print ("The CiTR Archiver conists of many second-long files which it has as mp3s, each with a unix timestamp. For example: %s-second.mp3 is the file from %s, local time, or %s UTC \n \nUNIX timestamps are by definition based on UTC." % ( current_timestamp,current,current_utc ) )
     print ("It is currently %s local time" % (current) )
 
+    #get the user to define what the time stamp is for now.
     #timestamp returned from this function is a string, no decimals in the timestamp
-    timestamp = gettimestamp()
+    #TODO: use argc to know if there's command line arg passed or not
+    #timestamp = gettimestamp()
+
+    #get the timestamp from the filename
+    timestamp = gettimestampfromfile(working_file)
+    print (timestamp)
+    print("\nLoading Audio File ... \n")
 
     #Prep the output directory
     ensure_dir(working_directory)
+
+    #write that we're starting a batch job to the log file
+    log = open( os.path.normpath( working_directory + "/" + log_file), 'a' )
+    log.write( str(datetime.now()) + "    ")
+    log.write( "Converting " + working_file + "\n \n")
+    log.close()
 
     #do the audio conversion now that we've carefully specified our parameters
     slice_file( AudioSegment.from_mp3(working_file), working_directory, timestamp)
