@@ -9,6 +9,7 @@ from datetime import datetime
 from dateutil import parser,tz
 import pytz
 from pydub import AudioSegment
+import ntpath
 
 # Enter your given "constants" here
 
@@ -20,7 +21,7 @@ working_directory = ("c:/Users/" + os.getenv('USERNAME') + "/audiosplitter/")
 #this is the source audio file - it can be anywhere really
 #TODO: expand to grabbing user input about first file in sequence and smartly iterate over files that are back-to-back using Concatenation
 #TODO: drag and drop file to convert (interface TBD)
-working_file = sys.argv[1] #set to this for filename specified via command line argv
+working_file = ntpath.basename(sys.argv[1]) #set to this for filename specified via command line argv
 #working_file = "" #set to this for filename specified here
 
 #log file location
@@ -36,18 +37,26 @@ def slice_file( infile, workingdir, start ):
     #find the duration of the input clip in millliseconds
     duration_in_milliseconds = len(infile)
 
+    print ("Converting " + working_file + "  (", end="", flush=True)
+
+
     song = infile
     #grab each one second slice and save it from the first second to the last whole second in the file
     for i in range(0,duration_in_milliseconds,1*one_second):
         #get the folder where this second goes:
         arr = datefolderfromtimestamp( int(start) + (int(i/1000)))
-        print ("Second number: %s \n" % (int(i/1000)) )
+        #print ("Second number: %s \n" % (int(i/1000)) )
         offset = (i + one_second)
         current_second = song[i:offset]
         ensure_dir(working_directory + "/" + arr[0] + "/" + arr[1] + "/" + arr[2] + "/")
         filename = os.path.normpath(working_directory + "/" + arr[0] + "/" + arr[1] + "/" + arr[2] + "/" + str(int(start) + (int(i/1000))) + "-second.mp3")
         current_second.export(filename, format="mp3")
 
+        #indicate some sort of progress is happening by printing a dot every three minutes processed
+        if( i % (3*60*one_second) == 0 ):
+            print ('.', end="",  flush=True)
+
+    print (")")
 #helper function to ensure the working directory exists where f is the input directory
 def ensure_dir(f):
     d = os.path.dirname(f)
@@ -147,8 +156,8 @@ def datefolderfromtimestamp( timestamp ):
     date_time = str(datetime.fromtimestamp(timestamp))
     #
     year = date_time[:4]
-    day = date_time[5:7]
-    month = date_time[8:10]
+    month = date_time[5:7]
+    day = date_time[8:10]
     if (month[0] == '0'):
         month  = month[1]
     if (day[0] == '0'):
@@ -169,9 +178,9 @@ def main():
     #strip the last two elements out so we can't see the .0 at the end, since the archiver doesn't use that
     current_timestamp = int(datetime.timestamp(current))
 
-    print ("================================================\n=== CiTR Audio Archive File Preparation Tool ===\n================================================\n \n")
-    print ("The CiTR Archiver conists of many second-long files which it has as mp3s, each with a unix timestamp. For example: %s-second.mp3 is the file from %s, local time, or %s UTC \n \nUNIX timestamps are by definition based on UTC." % ( current_timestamp,current,current_utc ) )
-    print ("It is currently %s local time" % (current) )
+    #print ("================================================\n=== CiTR Audio Archive File Preparation Tool ===\n================================================\n \n")
+    #print ("The CiTR Archiver conists of many second-long files which it has as mp3s, each with a unix timestamp. For example: %s-second.mp3 is the file from %s, local time, or %s UTC \n \nUNIX timestamps are by definition based on UTC." % ( current_timestamp,current,current_utc ) )
+    #print ("It is currently %s local time" % (current) )
 
     #get the user to define what the time stamp is for now.
     #timestamp returned from this function is a string, no decimals in the timestamp
@@ -180,7 +189,7 @@ def main():
 
     #get the timestamp from the filename
     timestamp = gettimestampfromfile(working_file)
-    print (timestamp)
+    #print (timestamp)
     print("\nLoading Audio File ... \n")
 
     #Prep the output directory
@@ -189,14 +198,14 @@ def main():
     #write that we're starting a batch job to the log file
     log = open( os.path.normpath( working_directory + "/" + log_file), 'a' )
     log.write( str(datetime.now()) + "    ")
-    log.write( "Converting " + working_file + "\n \n")
+    log.write( "Converting " + working_file + "\n")
     log.close()
 
     #do the audio conversion now that we've carefully specified our parameters
-    slice_file( AudioSegment.from_mp3(working_file), working_directory, timestamp)
+    slice_file( AudioSegment.from_mp3(sys.argv[1]), working_directory, timestamp)
 
-    print ("\n JOB COMPLETE")
-    sleep( 0.5 )
+    #print ("\n JOB COMPLETE")
+    #sleep( 0.5 )
 
 if __name__ == "__main__":
     main()
