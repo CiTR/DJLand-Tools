@@ -16,12 +16,11 @@ import ntpath
 # default for now is in the user's home
 # Yes, this is Windows only right now, sue me
 # this is where the one second clips go
-working_directory = ("c:/Users/" + os.getenv('USERNAME') + "/audiosplitter/")
+working_directory = ("e:/converted/")
 
 #this is the source audio file - it can be anywhere really
-#TODO: expand to grabbing user input about first file in sequence and smartly iterate over files that are back-to-back using Concatenation
 #TODO: drag and drop file to convert (interface TBD)
-working_file = ntpath.basename(sys.argv[1]) #set to this for filename specified via command line argv
+working_file = ntpath.basename(sys.argv[1]) #set to this for filename specified via command line arg
 #working_file = "" #set to this for filename specified here
 
 #log file location
@@ -38,7 +37,6 @@ def slice_file( infile, workingdir, start ):
     duration_in_milliseconds = len(infile)
 
     print ("Converting " + working_file + "  (", end="", flush=True)
-
 
     song = infile
     #grab each one second slice and save it from the first second to the last whole second in the file
@@ -126,10 +124,9 @@ def gettimestamp():
             sleep(1)
             confirm = 0;
 
-
     return str(start_timestamp)
 
-#Files from the logger are in the format are in the format "2016.01.09-15.30.00-S.mp3"
+#Files from the logger are in the format "2016.01.09-15.30.00-S.mp3"
 def gettimestampfromfile( name ):
     #parse the filename
     year = name[:4]
@@ -185,10 +182,10 @@ def main():
     #get the user to define what the time stamp is for now.
     #timestamp returned from this function is a string, no decimals in the timestamp
     #TODO: use argc to know if there's command line arg passed or not
-    #timestamp = gettimestamp()
+    timestamp = gettimestamp()
 
     #get the timestamp from the filename
-    timestamp = gettimestampfromfile(working_file)
+    #timestamp = gettimestampfromfile(working_file)
     #print (timestamp)
     print("\nLoading Audio File ... \n")
 
