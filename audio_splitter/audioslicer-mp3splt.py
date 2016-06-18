@@ -16,6 +16,7 @@ from datetime import datetime
 from dateutil import parser,tz
 import pytz
 import ntpath
+import re
 
 # Enter your given "constants" here
 
@@ -43,19 +44,19 @@ one_second = 1000
 def slice_file( infile, workingdir, stagingdir, start ):
 
     print ("Converting " + working_file)
-
-    mp3splitcommand = "mp3splt -xn -t 0.1 -d " + staging_dir + " -o @n \"" + infile +"\""
-    #do the slicing by starting another command line, not sure if this is windows-only or not. Just care that it works for now
-    os.system("start /wait cmd /c %s", mp3splitcommand)
+    mp3splitcommand = "start /wait cmd /c mp3splt -xn -t 0.1 -d " + staging_dir + " -o @n \"" + infile +"\""
+    #do the slicing by starting another command line,
+    os.system(mp3splitcommand)
     #rename them because mp3splt can't do custom incremented names the way we want
-    increment_file_numbers(staging_dir, start)
+    increment_file_numbers(staging_dir, int(start))
 
     #loop to move files out of the staging directory and into the proper working directory - we don't just
     #bulk move them because we always can't assume the files are all from the same day
     for file_name in os.listdir(staging_dir):
         #get the timestamp from the file
-        name = os.splitext(file_name)
-        timestamp = int(isdigit(name))
+        name = splitext(file_name)
+        timestamp_temp = re.findall('\d+',name[0])
+        timestamp = int(timestamp_temp[0])
         arr = datefolderfromtimestamp(timestamp)
         ensure_dir(working_directory + "/" + arr[0] + "/" + arr[1] + "/" + arr[2] + "/")
         source_filename = os.path.normpath(staging_dir + "/" + file_name )
@@ -174,14 +175,16 @@ from os.path import splitext
 
 #Function to rename the files that mp3splt spits out - expects (for now) the directory to be empty except for the files we want to rename, and that each file is 01.mp3 ... 02.mp3, etc
 def increment_file_numbers(directory, start_timestamp):
-        for file_name in os.listdir(directory):
+        # iterate over every file name in the directory
+        for file_name in os.listdir(os.path.abspath(directory)):
                 split = splitext(file_name)
                 #Files are 1.mp3 ... 2.mp3 .... etc
                 file_number = int(split[0])
-                new_number = file_number + start_timestamp - 1 #we must minus one because the first file is 1.mp3, not 0.mp3
+                #we must minus one because the first file is 1.mp3, not 0.mp3
+                new_number = file_number + start_timestamp - 1
                 new_name = str(new_number) + "-second.mp3"
-                old_path = directory + "\\" + file_name
-                new_path = directory + "\\" + new_name
+                old_path = os.path.normpath(directory + "/" + file_name)
+                new_path = os.path.normpath(directory + "/" + new_name)
                 os.rename(old_path, new_path)
 
 def main():
@@ -223,6 +226,6 @@ def main():
 
     #do the audio conversion now that we've carefully specified our parameters
     slice_file( sys.argv[1], working_directory, staging_dir, timestamp)
-    
+
 if __name__ == "__main__":
     main()

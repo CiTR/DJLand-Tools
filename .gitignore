@@ -63,3 +63,4 @@ target/
 
 #libav libraries for mp3 support
 libav-11.3-win64/
+*.mp3
