@@ -8,7 +8,7 @@ def increment_file_numbers(directory, start_timestamp):
                 #Files are 1.mp3 ... 2.mp3 .... etc
                 file_number = int(split[0])
                 new_number = file_number + start_timestamp - 1 #we must minus one because the first file is 1.mp3, not 0.mp3
-                new_name = str(new_number) + ".mp3"
+                new_name = str(new_number) + "-second.mp3"
                 old_path = directory + "\\" + file_name
                 new_path = directory + "\\" + new_name
                 os.rename(old_path, new_path)

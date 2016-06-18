@@ -1,14 +1,20 @@
 # A tool that, given an input file and a precise start time, outputs a series of Unix-timestamped files to a specified directory meant for CiTR's archiver
+# Setup - windows
+#   download add libav to your PATH
+#   install mp3splt and add it to your PATH
+#   requires python packages dateutil and pytimezone - install with pip
+#Setup - linux (NOT TESTED AT ALL ON LINUX)
+#   install libav and mp3splt using your distro's package manager
 
 import sys
 import time
 from time import sleep
 import os
+from os.path import splitext
 from datetime import datetime
 #because the standard datetime.strptime doesn't like timezones we bring in the big guns
 from dateutil import parser,tz
 import pytz
-from pydub import AudioSegment
 import ntpath
 
 # Enter your given "constants" here
@@ -17,6 +23,8 @@ import ntpath
 # Yes, this is Windows only right now, sue me
 # this is where the one second clips go
 working_directory = ("e:/converted/")
+#empty directory used by mp3splt to save files to temporarily
+staging_dir = ("e:/mp3splt/")
 
 #this is the source audio file - it can be anywhere really
 #TODO: drag and drop file to convert (interface TBD)
@@ -32,26 +40,29 @@ one_second = 1000
 
 #TODO: Confirm archiver folder behaviour around leap days and DST
 #@params: AudioSegment infile, String workingdir, String start
-def slice_file( infile, workingdir, start ):
-    #find the duration of the input clip in millliseconds
-    duration_in_milliseconds = len(infile)
+def slice_file( infile, workingdir, stagingdir, start ):
 
-    print ("Converting " + working_file + "  (", end="", flush=True)
+    print ("Converting " + working_file)
 
+    mp3splitcommand = "mp3splt -xn -t 0.1 -d " + staging_dir + " -o @n \"" + infile +"\""
+    #do the slicing by starting another command line, not sure if this is windows-only or not. Just care that it works for now
+    os.system("start /wait cmd /c %s", mp3splitcommand)
+    #rename them because mp3splt can't do custom incremented names the way we want
+    increment_file_numbers(staging_dir, start)
 
-        arr = datefolderfromtimestamp( int(start) + (int(i/1000)))
-        #print ("Second number: %s \n" % (int(i/1000)) )
-        offset = (i + one_second)
-        current_second = song[i:offset]
+    #loop to move files out of the staging directory and into the proper working directory - we don't just
+    #bulk move them because we always can't assume the files are all from the same day
+    for file_name in os.listdir(staging_dir):
+        #get the timestamp from the file
+        name = os.splitext(file_name)
+        timestamp = int(isdigit(name))
+        arr = datefolderfromtimestamp(timestamp)
         ensure_dir(working_directory + "/" + arr[0] + "/" + arr[1] + "/" + arr[2] + "/")
-        filename = os.path.normpath(working_directory + "/" + arr[0] + "/" + arr[1] + "/" + arr[2] + "/" + str(int(start) + (int(i/1000))) + "-second.mp3")
-        current_second.export(filename, format="mp3")
+        source_filename = os.path.normpath(staging_dir + "/" + file_name )
+        dest_filename = os.path.normpath(working_directory + "/" + arr[0] + "/" + arr[1] + "/" + arr[2] + "/" + file_name)
+        #move that file
+        os.rename(source_filename,dest_filename)
 
-        #indicate some sort of progress is happening by printing a dot every three minutes processed
-        if( i % (3*60*one_second) == 0 ):
-            print ('.', end="",  flush=True)
-
-    print (")")
 #helper function to ensure the working directory exists where f is the input directory
 def ensure_dir(f):
     d = os.path.dirname(f)
@@ -168,7 +179,7 @@ def increment_file_numbers(directory, start_timestamp):
                 #Files are 1.mp3 ... 2.mp3 .... etc
                 file_number = int(split[0])
                 new_number = file_number + start_timestamp - 1 #we must minus one because the first file is 1.mp3, not 0.mp3
-                new_name = str(new_number) + ".mp3"
+                new_name = str(new_number) + "-second.mp3"
                 old_path = directory + "\\" + file_name
                 new_path = directory + "\\" + new_name
                 os.rename(old_path, new_path)
@@ -198,10 +209,11 @@ def main():
     #get the timestamp from the filename
     timestamp = gettimestampfromfile(working_file)
     #print (timestamp)
-    print("\nLoading Audio File ... \n")
 
     #Prep the output directory
     ensure_dir(working_directory)
+    #and the staging directory
+    ensure_dir(staging_dir)
 
     #write that we're starting a batch job to the log file
     log = open( os.path.normpath( working_directory + "/" + log_file), 'a' )
@@ -210,10 +222,7 @@ def main():
     log.close()
 
     #do the audio conversion now that we've carefully specified our parameters
-    slice_file( sys.argv[1], working_directory, timestamp)
-
-    #print ("\n JOB COMPLETE")
-    #sleep( 0.5 )
-
+    slice_file( sys.argv[1], working_directory, staging_dir, timestamp)
+    
 if __name__ == "__main__":
     main()
